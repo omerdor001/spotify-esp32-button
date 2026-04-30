@@ -31,8 +31,6 @@ Press a button and instantly start playing your favorite playlist - no phone or 
 
 ### Optional (for accessibility):
 - **Large Arcade Button** (60mm) - easier to press
-- **Dome Button with LED** - visual feedback
-- **Foot Switch** - hands-free operation
 
 ---
 
@@ -235,52 +233,6 @@ Upload the code again. Now it will connect automatically! ✅
 
 ---
 
-## 🎨 Customization Ideas
-
-### Multiple Playlists with Multiple Buttons:
-
-```cpp
-const char* PLAYLIST_MORNING = "37i9dQZF1DXcBWIGoYBM5M";
-const char* PLAYLIST_WORKOUT = "37i9dQZF1DX0XUsuxWHRQd";
-const char* PLAYLIST_SLEEP = "37i9dQZF1DX4sWSpwq3LiO";
-
-const int BUTTON_1 = 2;
-const int BUTTON_2 = 4;
-const int BUTTON_3 = 5;
-
-void loop() {
-  if (digitalRead(BUTTON_1) == LOW) {
-    playPlaylist("spotify:playlist:" + String(PLAYLIST_MORNING));
-  }
-  if (digitalRead(BUTTON_2) == LOW) {
-    playPlaylist("spotify:playlist:" + String(PLAYLIST_WORKOUT));
-  }
-  if (digitalRead(BUTTON_3) == LOW) {
-    playPlaylist("spotify:playlist:" + String(PLAYLIST_SLEEP));
-  }
-  delay(50);
-}
-```
-
-### Add Visual Feedback with LED:
-
-```cpp
-const int LED_PIN = 5;
-
-void setup() {
-  pinMode(LED_PIN, OUTPUT);
-  // ... rest of setup
-}
-
-void playPlaylist(const char* uri) {
-  digitalWrite(LED_PIN, HIGH);  // LED on while playing
-  // ... play code
-  digitalWrite(LED_PIN, LOW);   // LED off
-}
-```
-
----
-
 ## 🔧 Troubleshooting
 
 ### Button Not Responding:
@@ -394,49 +346,11 @@ Plays a specific playlist using direct API call with HTTPClient.
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-### To Do:
-- [ ] Add support for album playback
-- [ ] Implement volume control with potentiometer
-- [ ] Add OLED display for track info
-- [ ] Support for multiple WiFi networks
-- [ ] Add sleep mode to save power
-
----
-
-## 📜 License
-
-This project is open source and available under the [MIT License](LICENSE).
-
----
-
 ## 🙏 Acknowledgments
 
 - **SpotifyEsp32 Library** by [Finian Landes](https://github.com/FinianLandes/Spotify_Esp32)
 - **Spotify Web API** for the amazing API
 - **Arduino Community** for ESP32 support
-
----
-
-## 📞 Support
-
-Having issues? Here's how to get help:
-
-1. **Check Troubleshooting section** above
-2. **Open an issue** on GitHub with:
-   - Your hardware setup
-   - Serial Monitor output
-   - Error messages
-3. **Join discussions** in Issues tab
-
----
-
-## 🌟 Show Your Support
-
-If this project helped you, please give it a ⭐ on GitHub!
 
 ---
 
