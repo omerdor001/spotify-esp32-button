@@ -1,96 +1,115 @@
-#include <WiFi.h>
-#include <Arduino.h>
-#include <SpotifyEsp32.h>
-#include <HTTPClient.h> 
+#include <WiFiManager.h>
+#include <WiFiClientSecure.h>
+#include <SpotifyArduino.h>
+#include <SpotifyArduinoCert.h>
+#include <Preferences.h>
+#include <WebServer.h>
 
-// WiFi
-const char* ssid = "";
-const char* password = "";
+#define CLIENT_ID     "your_spotify_client_id"
+#define CLIENT_SECRET "your_spotify_client_secret"
+#define BUTTON_PIN    15
 
-// Spotify
-const char* client_id = "";
-const char* client_secret = "";
+Preferences      prefs;
+WiFiClientSecure secureClient;
+WebServer        server(80);
+SpotifyArduino   spotify(secureClient, CLIENT_ID, CLIENT_SECRET);
 
-//const char* refresh_token = "REFRESH_TOKEN_שלך";
-// Spotify spotify(client_id, client_secret, refresh_token);
+bool authDone    = false;
+bool wasPressed  = false;
+bool g_isPlaying = false;
 
-Spotify spotify(client_id, client_secret);
+String callbackUri() {
+    return "http://" + WiFi.localIP().toString() + "/callback";
+}
 
-const int buttonPin = 2; 
-bool wasPressed = false;
+void handleRoot() {
+    String url = String("https://accounts.spotify.com/authorize") +
+                 "?client_id="         + CLIENT_ID +
+                 "&response_type=code" +
+                 "&redirect_uri="      + callbackUri() +
+                 "&scope=user-read-playback-state%20user-modify-playback-state";
+    server.sendHeader("Location", url, true);
+    server.send(302, "text/plain", "");
+}
+
+void handleCallback() {
+    for (uint8_t i = 0; i < server.args(); i++) {
+        if (server.argName(i) != "code") continue;
+        const char* token = spotify.requestAccessTokens(
+            server.arg(i).c_str(), callbackUri().c_str());
+        if (token) {
+            prefs.begin("spotify", false);
+            prefs.putString("refresh_token", token);
+            prefs.end();
+            server.send(200, "text/html",
+                "<h2>Authenticated!</h2>"
+                "<p>Token saved. Close this tab — press the button to control Spotify.</p>");
+            authDone = true;
+            Serial.println("Refresh token saved. Ready.");
+            return;
+        }
+    }
+    server.send(500, "text/plain", "Auth failed — check Serial Monitor.");
+}
+
+void playerDetailsCallback(PlayerDetails details) {
+    g_isPlaying = details.isPlaying;
+}
+
+void togglePlayback() {
+    int status = spotify.getPlayerDetails(playerDetailsCallback);
+    if (status == 200) {
+        if (g_isPlaying) {
+            spotify.pause();
+            Serial.println("Paused.");
+        } else {
+            spotify.play();
+            Serial.println("Playing.");
+        }
+    } else if (status == 204) {
+        Serial.println("No active Spotify device — open Spotify on any device first.");
+    } else {
+        Serial.printf("getPlayerDetails failed: %d\n", status);
+    }
+}
 
 void setup() {
-  Serial.begin(115200);
-  pinMode(buttonPin, INPUT);  
-  wifiConnection();  
-  spotify.begin();
-  Serial.println("Go to this address to connect: ");
-  while (!spotify.is_auth()) {
-    spotify.handle_client();
-    delay(100);
-  }
-  Serial.print("Save this token: ");
-  Serial.println(spotify.get_user_tokens().refresh_token);
+    Serial.begin(115200);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    WiFiManager wm;
+    if (!wm.autoConnect("ESP32-Spotify-Setup")) {
+        Serial.println("WiFi failed — restarting.");
+        ESP.restart();
+    }
+    Serial.println("WiFi: " + WiFi.localIP().toString());
+    secureClient.setCACert(spotify_server_cert);
+    prefs.begin("spotify", true);
+    String saved = prefs.getString("refresh_token", "");
+    prefs.end();
+    if (saved.length() > 0) {
+        spotify.setRefreshToken(saved.c_str());
+        authDone = true;
+        Serial.println("Loaded saved token. Ready.");
+    } else {
+        // First boot: serve OAuth flow from the ESP32 itself.
+        // Add  http://<ESP32_IP>/callback  to your Spotify app's Redirect URIs.
+        Serial.println("No token — open: http://" + WiFi.localIP().toString());
+        server.on("/", handleRoot);
+        server.on("/callback", handleCallback);
+        server.begin();
+    }
 }
 
 void loop() {
-  bool isPressed = (digitalRead(buttonPin) == LOW);
-  if (isPressed && !wasPressed) {
-    Serial.println("Button Pressed");
-    playStopPlaylist();
-  }
-  wasPressed = isPressed;
-  delay(50);
-}
-
-void wifiConnection() {
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("Wifi Connected");
-}
-
-void playStopPlaylist() {
-  response res = spotify.get_current_playing_track();
-  if (res.status_code == 200) {
-    Serial.print("Response: ");
-    Serial.println(res.status_code);
-    bool playing = res.reply["is_playing"];
-    
-    if (playing) {
-      Serial.println("Pause playing ");
-      spotify.pause_playback();
-    } else {
-      Serial.println("Continue playing ");
-      spotify.start_a_users_playback();
+    if (!authDone) {
+        server.handleClient();
+        return;
     }
-  } else {
-    Serial.println("Start playing ");
-    playPlaylist("spotify:playlist:YOUR_PLAYLIST_ID");  
-  }
-}
-
-void playPlaylist(const char* playlist_uri) {
-  if (!spotify.is_auth()) {
-    Serial.println("User not connected");
-    return;
-  }
-  HTTPClient http;
-  http.begin("https://api.spotify.com/v1/me/player/play");
-  String auth = "Bearer " + String(spotify.get_user_tokens().refresh_token);
-  http.addHeader("Authorization", auth);
-  http.addHeader("Content-Type", "application/json");
-  String body = "{\"context_uri\":\"" + String(playlist_uri) + "\"}";
-  int httpCode = http.PUT(body);
-  Serial.println(httpCode);
-  
-  if (httpCode == 200 || httpCode == 204) {
-    Serial.println("Start Playlist after HTTP call");
-  } else {
-    Serial.println("Error ");
-    Serial.println(httpCode);
-  }
-  http.end();
+    bool isPressed = (digitalRead(BUTTON_PIN) == LOW);
+    if (isPressed && !wasPressed) {
+        Serial.println("Button — toggling Spotify");
+        togglePlayback();
+    }
+    wasPressed = isPressed;
+    delay(50);
 }
