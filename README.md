@@ -1,357 +1,132 @@
-# 🎵 Spotify Playlist Button Controller
+# Spotify Button Controller (ESP32)
 
-Control your Spotify playlists with a physical button using ESP32!
+Control Spotify play/pause with a physical button using an ESP32 over Bluetooth.
 
-Press a button and instantly start playing your favorite playlist - no phone or computer needed.
+**Flow: Button → ESP32 (BLE) → Phone → Spotify**
+
+The ESP32 pairs with your phone as a Bluetooth media controller (like a headset button). When you press the physical button, the ESP32 sends a Play/Pause media key to your phone, and your phone forwards it to Spotify — no WiFi or Spotify credentials needed on the ESP32.
 
 ![ESP32](https://img.shields.io/badge/ESP32-Compatible-blue)
-![Spotify](https://img.shields.io/badge/Spotify-API-green)
+![Bluetooth](https://img.shields.io/badge/Bluetooth-BLE-blue)
+![Spotify](https://img.shields.io/badge/Spotify-via%20Phone-green)
 ![Arduino](https://img.shields.io/badge/Arduino-IDE-teal)
 
 ---
 
-## ✨ Features
+## Features
 
-- 🎯 **One-click playlist control** - Press button to play your playlist
-- ⏯️ **Smart toggle** - Play/pause if something is already playing
-- 🔄 **Auto token refresh** - Never need to re-authenticate
-- 📶 **WiFi multi-network support** - Works anywhere
-- 🎨 **Accessible design ready** - Easy to add large buttons for accessibility
-- 🔐 **Secure OAuth2** - Industry-standard authentication
-
----
-
-## 🛠️ Hardware Requirements
-
-### Required:
-- **ESP32 Development Board** (~$5-10)
-- **Push Button** or any momentary switch
-- **USB Cable** for programming
-- **2 Jumper Wires** (optional if button plugs directly)
-
-### Optional (for accessibility):
-- **Large Arcade Button** (60mm) - easier to press
+- **One-button toggle** — press to play, press again to pause/resume
+- **No WiFi required** — Bluetooth only; no network setup needed
+- **No credentials** — no Spotify Client ID/Secret on the device
+- **Native media keys** — phone handles Spotify routing automatically
+- **Minimal code** — simple BLE HID implementation
 
 ---
 
-## 📚 Software Requirements
+## Hardware Requirements
 
-### Arduino IDE Setup:
+| Part | Notes |
+|---|---|
+| ESP32 Development Board | Any WROOM/WROVER variant |
+| Momentary push button | Arcade button, tactile switch, etc. |
+| USB cable | For programming |
+| 2 jumper wires | To connect button |
 
-1. **Install Arduino IDE** (1.8.x or 2.x)
-   - Download from: https://www.arduino.cc/en/software
+---
 
-2. **Add ESP32 Board Support:**
-   - Open Arduino IDE
-   - Go to: `File → Preferences`
-   - Add to "Additional Board Manager URLs":
+## Wiring
+
+```
+ESP32          Button
+GPIO 15 ───── Pin 1
+GND     ───── Pin 2
+```
+
+`INPUT_PULLUP` is used — no external resistor needed.
+
+---
+
+## Software Requirements
+
+### Arduino IDE
+
+1. Install [Arduino IDE 2.x](https://www.arduino.cc/en/software)
+2. Add ESP32 board support:
+   - `File → Preferences` → Additional Boards Manager URLs:
      ```
      https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
      ```
-   - Go to: `Tools → Board → Boards Manager`
-   - Search for "ESP32" and install
+   - `Tools → Board → Boards Manager` → search **ESP32** → Install
 
-3. **Install Required Libraries:**
-   
-   Via Library Manager (`Sketch → Include Library → Manage Libraries`):
-   
-   - **SpotifyEsp32** (by Finian Landes)
-   - **ArduinoJson** (version 7.x)
+### Library
+
+Install via `Sketch → Include Library → Manage Libraries`:
+
+| Library | Author |
+|---|---|
+| **ESP32 BLE Keyboard** | T-vK |
+
+> Or install manually from [github.com/T-vK/ESP32-BLE-Keyboard](https://github.com/T-vK/ESP32-BLE-Keyboard)
 
 ---
 
-## 🔌 Wiring Diagram
+## Setup
 
-### Simple Connection:
+### 1. Upload to ESP32
+
+- `Tools → Board → ESP32 Dev Module`
+- `Tools → Port → [your port]`
+- Click **Upload**
+
+### 2. Pair with Your Phone
+
+After uploading, open the Serial Monitor (115200 baud). You'll see:
 
 ```
-ESP32                    Button
-┌────────┐              ┌──────┐
-│        │              │      │
-│ GPIO 2 ├──────────────┤  Pin1│
-│        │              │      │
-│  GND   ├──────────────┤  Pin2│
-│        │              │      │
-└────────┘              └──────┘
+BLE started. Pair 'Spotify Button' with your phone.
 ```
 
-**That's it!** Only 2 wires needed.
+On your phone:
+- **Android:** Settings → Bluetooth → pair **Spotify Button**
+- **iOS:** Settings → Bluetooth → pair **Spotify Button**
 
-### Connection Details:
-- Button Pin 1 → ESP32 **GPIO 2**
-- Button Pin 2 → ESP32 **GND**
+### 3. Use It
 
-> **Note:** We use `INPUT_PULLUP` mode, so no external resistor needed!
-
----
-
-## 🚀 Quick Start Guide
-
-### Step 1: Get Spotify API Credentials
-
-1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Log in with your Spotify account
-3. Click **"Create App"**
-4. Fill in the details:
-   - **App Name:** ESP32 Button Controller
-   - **App Description:** Physical button to control Spotify
-   - **Redirect URI:** `https://spotifyesp32.vercel.app/api/spotify/callback`
-   - **API:** Check "Web API"
-5. Click **Save**
-6. Copy your **Client ID** and **Client Secret**
+Open Spotify on your phone, then press the physical button. The ESP32 sends a Play/Pause media key and Spotify responds immediately.
 
 ---
 
-### Step 2: Get Your Playlist ID
+## Usage
 
-#### Option A - Desktop:
-1. Open Spotify
-2. Right-click on your playlist
-3. Share → Copy Playlist Link
-4. You'll get: `https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M`
-5. The ID is: `37i9dQZF1DXcBWIGoYBM5M`
+| Action | Result |
+|---|---|
+| Press button (Spotify playing) | Pauses |
+| Press button (Spotify paused) | Resumes |
+| Press button (phone not connected) | Serial prints "not connected" |
 
-#### Option B - Mobile:
-1. Open playlist in Spotify app
-2. Tap ⋯ (three dots)
-3. Share → Copy Link
-4. Extract the ID from the link
+**Requirement:** Spotify must be open on your phone. The button controls an active Spotify session.
 
 ---
 
-### Step 3: Configure the Code
+## Troubleshooting
 
-1. **Clone this repository:**
-   ```bash
-   git clone https://github.com/omerdor001/spotify_playlist_connection_to_button.git
-   ```
+### Button not responding
+- Confirm wiring: GPIO 15 → button → GND
+- Short the two button wires together to test without the button
 
-2. **Open `spotify_button.ino` in Arduino IDE**
+### Phone doesn't see "Spotify Button"
+- Make sure Bluetooth is on and your phone isn't already paired at its device limit
+- Press the ESP32 reset button and try pairing again
 
-3. **Update your credentials:**
+### Paired but Play/Pause doesn't work
+- Some Android phones require you to grant "Media" permissions to the BLE device — check the Bluetooth device settings on your phone
+- On iOS, make sure Spotify is in the foreground the first time you press the button
 
-```cpp
-// WiFi Settings
-const char* ssid = "YOUR_WIFI_NAME";
-const char* password = "YOUR_WIFI_PASSWORD";
-
-// Spotify Settings
-const char* client_id = "YOUR_CLIENT_ID";
-const char* client_secret = "YOUR_CLIENT_SECRET";
-
-// Your Playlist
-const char* MY_PLAYLIST = "YOUR_PLAYLIST_ID";
-```
+### Serial Monitor shows garbage
+- Set baud rate to **115200**
 
 ---
 
-### Step 4: First Time Setup (Authentication)
+## Acknowledgments
 
-1. **Upload the code to ESP32:**
-   - Select: `Tools → Board → ESP32 Dev Module`
-   - Select: `Tools → Port → [Your ESP32 Port]`
-   - Click **Upload**
-
-2. **Open Serial Monitor:**
-   - `Tools → Serial Monitor`
-   - Set baud rate to: **115200**
-
-3. **You'll see:**
-   ```
-   📡 Connecting to WiFi...
-   ✅ WiFi Connected!
-   
-   🔑 To authenticate, open this URL in your browser:
-   https://spotifyesp32.vercel.app/?clientId=YOUR_ID
-   
-   ⏳ Waiting for authorization...
-   ```
-
-4. **Copy the URL** and open it in your browser
-
-5. **Log in to Spotify** and authorize the app
-
-6. **Return to Serial Monitor:**
-   ```
-   ✅ Connected!
-   💾 SAVE THIS TOKEN:
-   BQC8x...very_long_token...xyz
-   ```
-
-7. **Copy the Refresh Token** and save it!
-
----
-
-### Step 5: Add Refresh Token (One-time)
-
-Update your code with the token:
-
-```cpp
-// Add this line:
-const char* refresh_token = "YOUR_REFRESH_TOKEN_HERE";
-
-// Change this line:
-// FROM:
-Spotify spotify(client_id, client_secret);
-
-// TO:
-Spotify spotify(client_id, client_secret, refresh_token);
-```
-
-**Remove or comment out the authentication loop:**
-
-```cpp
-/*
-while (!spotify.is_auth()) {
-  spotify.handle_client();
-  delay(100);
-}
-*/
-```
-
-Upload the code again. Now it will connect automatically! ✅
-
----
-
-## 🎮 Usage
-
-### Basic Operation:
-
-- **Press button once:**
-  - If nothing playing → Start your playlist
-  - If playing → Pause
-  - If paused → Resume
-
-### Serial Monitor Output:
-
-```
-🎵 Button pressed!
-🎵 Starting playlist...
-📡 Response: 204
-✅ Playing!
-```
-
----
-
-## 🔧 Troubleshooting
-
-### Button Not Responding:
-
-**Check:**
-- ✅ Wiring: GPIO 2 and GND are connected
-- ✅ Code: `pinMode(buttonPin, INPUT_PULLUP);` is set
-- ✅ Button works: short the two wires together
-
-### WiFi Not Connecting:
-
-**Check:**
-- ✅ SSID and password are correct (case-sensitive!)
-- ✅ ESP32 is in range of WiFi
-- ✅ WiFi is 2.4GHz (ESP32 doesn't support 5GHz)
-
-### Spotify Not Playing:
-
-**Error 401 - Unauthorized:**
-- Token expired → Run authentication again
-
-**Error 404 - Device Not Found:**
-- Open Spotify on at least one device (phone/computer) before pressing button
-
-**Error 403 - Forbidden:**
-- Check that your Spotify account has correct permissions
-- Make sure the playlist is accessible
-
-### Serial Monitor Shows Garbage:
-
-**Fix:**
-- Set baud rate to **115200** in Serial Monitor
-
----
-
-## 🌍 Alternative Hardware
-
-### Compatible ESP32 Boards:
-- ESP32 DevKit V1
-- ESP32 WROOM
-- ESP32 WROVER
-- NodeMCU-32S
-
-### Alternative Button Types:
-- **Arcade Button** - Large, colorful, easy to press
-- **Tactile Switch** - Small PCB-mounted button
-- **Mechanical Switch** - From old appliances
-- **DIY Pressure Pad** - Made with aluminum foil and foam
-
----
-
-## 🔐 Security Notes
-
-- **Never commit your credentials** to public repositories
-- Store `client_secret` and `refresh_token` securely
-- Use `.gitignore` to exclude configuration files:
-
-```gitignore
-# Add to .gitignore
-config.h
-secrets.h
-*.private
-```
-
-**Better approach:** Store credentials in a separate file:
-
-```cpp
-// Create config.h (add to .gitignore)
-#ifndef CONFIG_H
-#define CONFIG_H
-
-const char* ssid = "YOUR_WIFI";
-const char* password = "YOUR_PASSWORD";
-const char* client_id = "YOUR_CLIENT_ID";
-const char* client_secret = "YOUR_CLIENT_SECRET";
-const char* refresh_token = "YOUR_TOKEN";
-
-#endif
-```
-
-Then in main file:
-```cpp
-#include "config.h"
-```
-
----
-
-## 📖 API Reference
-
-### SpotifyEsp32 Library Methods Used:
-
-```cpp
-// Authentication
-spotify.begin();
-spotify.is_auth();
-spotify.handle_client();
-spotify.get_user_tokens();
-
-// Playback Control
-spotify.get_current_playback();
-spotify.pause_playback();
-spotify.start_a_users_playback();
-```
-
-### Custom Function:
-
-```cpp
-void playPlaylist(const char* playlist_uri)
-```
-Plays a specific playlist using direct API call with HTTPClient.
-
----
-
-## 🙏 Acknowledgments
-
-- **SpotifyEsp32 Library** by [Finian Landes](https://github.com/FinianLandes/Spotify_Esp32)
-- **Spotify Web API** for the amazing API
-- **Arduino Community** for ESP32 support
-
----
-
-**Built with ❤️ for music lovers who want a simple, physical way to control their playlists**
+- [ESP32 BLE Keyboard](https://github.com/T-vK/ESP32-BLE-Keyboard) by T-vK
