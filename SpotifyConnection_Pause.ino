@@ -2,7 +2,7 @@
 #include <HijelHID_BLEKeyboard.h>
 // Name shown when pairing from the phone/PC. Manufacturer + battery % are cosmetic.
 HijelHID_BLEKeyboard bleKeyboard("Spotify Button", "DIY", 100);
-const int buttonPin = 4;
+const int buttonPin = 17;
 // Pin must stay continuously LOW for minHoldMs before a press is registered.
 // This filters out EMI noise spikes (< 1ms) and antenna pickup from the BLE radio.
 // With a proper tactile button, 10ms is more than enough.
