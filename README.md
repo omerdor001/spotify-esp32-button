@@ -1,10 +1,10 @@
 # Spotify Button Controller (ESP32)
 
-Control Spotify play/pause with a physical button using an ESP32 over Bluetooth.
+Control Spotify with two physical buttons using an ESP32 over Bluetooth.
 
 **Flow: Button → ESP32 (BLE) → Phone → Spotify**
 
-The ESP32 pairs with your phone as a Bluetooth media controller (like a headset button). When you press the physical button, the ESP32 sends a Play/Pause media key to your phone, and your phone forwards it to Spotify — no WiFi or Spotify credentials needed on the ESP32.
+The ESP32 pairs with your phone as a Bluetooth media controller (like a headset button). When you press a button, the ESP32 sends a media key to your phone, and your phone forwards it to Spotify — no WiFi or Spotify credentials needed on the ESP32.
 
 ![ESP32](https://img.shields.io/badge/ESP32-Compatible-blue)
 ![Bluetooth](https://img.shields.io/badge/Bluetooth-BLE%20%28NimBLE%29-blue)
@@ -15,7 +15,9 @@ The ESP32 pairs with your phone as a Bluetooth media controller (like a headset 
 
 ## Features
 
-- **One-button toggle** — press to play, press again to pause/resume
+- **Play/Next button** — press to play if stopped; press to skip to the next track if already playing
+- **Stop button** — stops playback and resets internal state
+- **Next-press throttle** — Next is ignored if a Play or Next was sent in the last 5 seconds, preventing accidental double-skips
 - **No WiFi required** — Bluetooth only; no network setup needed
 - **No credentials** — no Spotify Client ID/Secret on the device
 - **Native media keys** — phone handles Spotify routing automatically
@@ -28,18 +30,22 @@ The ESP32 pairs with your phone as a Bluetooth media controller (like a headset 
 | Part | Notes |
 |---|---|
 | ESP32 Development Board | NodeMCU-32S or any WROOM/WROVER variant |
-| Momentary push button | Tactile switch, arcade button, etc. |
+| 2× Momentary push button | Tactile switch, arcade button, etc. |
 | USB cable | For programming |
-| 2 jumper wires | To connect button |
+| 4 jumper wires | 2 per button |
 
 ---
 
 ## Wiring
 
 ```
-ESP32          Button
-GPIO 4  ───── Pin 1
-GND     ───── Pin 2
+ESP32           Play/Next button
+GPIO 4  ──────── Pin 1
+GND     ──────── Pin 2
+
+ESP32           Stop button
+GPIO 18 ──────── Pin 1
+GND     ──────── Pin 2
 ```
 
 `INPUT_PULLUP` is used — no external resistor needed. Use a **soldered or direct connection**; breadboards with poor contact will cause phantom keypresses (the floating pin picks up RF noise from the on-chip BLE radio).
@@ -50,18 +56,19 @@ GND     ───── Pin 2
 
 ### Option A — Arduino CLI (recommended)
 
+Both libraries live in the `libraries/` folder of this repo — no separate install step needed.
+
 ```bash
-# Install ESP32 core
+# Install ESP32 core (one-time)
 arduino-cli core install esp32:esp32
 
-# Install libraries
-arduino-cli lib install "NimBLE-Arduino" "HijelHID_BLEKeyboard"
-
-# Compile
-arduino-cli compile --fqbn esp32:esp32:nodemcu-32s SpotifyConnection-bluetooth
-
-# Flash (replace port as needed)
-arduino-cli upload --fqbn esp32:esp32:nodemcu-32s --port /dev/cu.usbserial-0001 SpotifyConnection-bluetooth
+# Compile and flash in one step (replace port as needed)
+arduino-cli compile --upload \
+  --fqbn esp32:esp32:nodemcu-32s \
+  --port /dev/cu.usbserial-0001 \
+  --library libraries/HijelHID_BLEKeyboard \
+  --library libraries/NimBLE-Arduino \
+  SpotifyConnection-bluetooth/
 ```
 
 ### Option B — Arduino IDE 2.x
@@ -89,7 +96,12 @@ arduino-cli upload --fqbn esp32:esp32:nodemcu-32s --port /dev/cu.usbserial-0001 
 
 **Arduino CLI:**
 ```bash
-arduino-cli upload --fqbn esp32:esp32:nodemcu-32s --port /dev/cu.usbserial-0001 SpotifyConnection-bluetooth
+arduino-cli compile --upload \
+  --fqbn esp32:esp32:nodemcu-32s \
+  --port /dev/cu.usbserial-0001 \
+  --library libraries/HijelHID_BLEKeyboard \
+  --library libraries/NimBLE-Arduino \
+  SpotifyConnection-bluetooth/
 ```
 
 **Arduino IDE:**
@@ -112,28 +124,35 @@ On your phone:
 
 ### 3. Use It
 
-Open Spotify on your phone, then press the physical button. The ESP32 sends a Play/Pause media key and Spotify responds immediately.
+Open Spotify on your phone, then use the buttons. The ESP32 sends media keys and Spotify responds immediately.
 
 ---
 
 ## Usage
 
-| Action | Result |
-|---|---|
-| Press button (Spotify playing) | Pauses |
-| Press button (Spotify paused) | Resumes |
-| Press button (BLE not connected) | Serial prints "not connected" |
+| Button | Situation | Action |
+|---|---|---|
+| Play/Next (GPIO 4) | Spotify stopped | Plays |
+| Play/Next (GPIO 4) | Spotify playing | Skips to next track |
+| Play/Next (GPIO 4) | Within 5s of last Play/Next | Ignored (throttle) |
+| Stop (GPIO 18) | Any | Stops playback |
+| Either button | BLE not connected | Serial prints "not connected" |
 
 **Requirement:** Spotify must be open on your phone. The button controls an active Spotify session.
+
+### State sync note
+
+The device tracks playback state locally based on what commands it has sent. If playback is changed from the phone (e.g. someone pauses Spotify manually), the device won't know. In that case, press **Stop** once to reset the device's state, then **Play/Next** to resume. This is an inherent limitation of BLE HID, which is a write-only channel.
 
 ---
 
 ## Troubleshooting
 
 ### Button not responding
-- Confirm wiring: GPIO 4 → button → GND
+- Confirm wiring: GPIO 4 → Play/Next button → GND, GPIO 18 → Stop button → GND
 - Avoid breadboards — poor contact causes unreliable readings. Solder the button or use a direct wire for testing.
 - Short the two button wires together to test without a button
+- Open the Serial Monitor (115200 baud) and press the button — you should see a log line. If nothing appears, it's a wiring/pin issue, not a software one.
 
 ### Phantom keypresses / songs skipping without pressing
 - This is RF noise from the BLE radio coupling into a floating or poorly-connected GPIO pin
