@@ -1,6 +1,6 @@
 # Spotify Button Controller (ESP32)
 
-Control Spotify with two physical buttons using an ESP32 over Bluetooth.
+Control Spotify with three physical buttons using an ESP32 over Bluetooth.
 
 **Flow: Button → ESP32 (BLE) → Phone → Spotify**
 
@@ -16,6 +16,7 @@ The ESP32 pairs with your phone as a Bluetooth media controller (like a headset 
 ## Features
 
 - **Play/Next button** — press to play if stopped; press to skip to the next track if already playing
+- **Prev button** — skips to the previous track
 - **Stop button** — stops playback and resets internal state
 - **Next-press throttle** — Next is ignored if a Play or Next was sent in the last 5 seconds, preventing accidental double-skips
 - **No WiFi required** — Bluetooth only; no network setup needed
@@ -30,9 +31,9 @@ The ESP32 pairs with your phone as a Bluetooth media controller (like a headset 
 | Part | Notes |
 |---|---|
 | ESP32 Development Board | NodeMCU-32S or any WROOM/WROVER variant |
-| 2× Momentary push button | Tactile switch, arcade button, etc. |
+| 3× Momentary push button | Tactile switch, arcade button, etc. |
 | USB cable | For programming |
-| 4 jumper wires | 2 per button |
+| 6 jumper wires | 2 per button |
 
 ---
 
@@ -41,6 +42,10 @@ The ESP32 pairs with your phone as a Bluetooth media controller (like a headset 
 ```
 ESP32           Play/Next button
 GPIO 4  ──────── Pin 1
+GND     ──────── Pin 2
+
+ESP32           Prev button
+GPIO 17 ──────── Pin 1
 GND     ──────── Pin 2
 
 ESP32           Stop button
@@ -135,8 +140,9 @@ Open Spotify on your phone, then use the buttons. The ESP32 sends media keys and
 | Play/Next (GPIO 4) | Spotify stopped | Plays |
 | Play/Next (GPIO 4) | Spotify playing | Skips to next track |
 | Play/Next (GPIO 4) | Within 5s of last Play/Next | Ignored (throttle) |
+| Prev (GPIO 17) | Any | Skips to previous track |
 | Stop (GPIO 18) | Any | Stops playback |
-| Either button | BLE not connected | Serial prints "not connected" |
+| Any button | BLE not connected | Serial prints "not connected" |
 
 **Requirement:** Spotify must be open on your phone. The button controls an active Spotify session.
 
@@ -149,7 +155,7 @@ The device tracks playback state locally based on what commands it has sent. If 
 ## Troubleshooting
 
 ### Button not responding
-- Confirm wiring: GPIO 4 → Play/Next button → GND, GPIO 18 → Stop button → GND
+- Confirm wiring: GPIO 4 → Play/Next, GPIO 17 → Prev, GPIO 18 → Stop (each button other leg → GND)
 - Avoid breadboards — poor contact causes unreliable readings. Solder the button or use a direct wire for testing.
 - Short the two button wires together to test without a button
 - Open the Serial Monitor (115200 baud) and press the button — you should see a log line. If nothing appears, it's a wiring/pin issue, not a software one.
@@ -170,8 +176,8 @@ The device tracks playback state locally based on what commands it has sent. If 
 ### Serial Monitor shows garbage
 - Set baud rate to **115200**
 
-### Compile error: `BleKeyboard.h: No such file or directory`
-- You are trying to compile the old Bluedroid-based `SpotifyConnection.ino`. Use `SpotifyConnection-bluetooth/` instead, which uses NimBLE and compiles against ESP32 core 3.x.
+### Compile error: missing library headers
+- Make sure you pass both `--library` paths (CLI) or have **NimBLE-Arduino** and **HijelHID_BLEKeyboard** installed (IDE). See [Software Requirements](#software-requirements).
 
 ---
 
@@ -179,9 +185,8 @@ The device tracks playback state locally based on what commands it has sent. If 
 
 ```
 SpotifyConnection-bluetooth/
-    SpotifyConnection-bluetooth.ino   ← current firmware (NimBLE / HijelHID)
-SpotifyConnection.ino                 ← legacy Bluedroid version (does not compile on core 3.x)
-SpotifyConnection-wifi.ino            ← WiFi-based version (separate approach)
+    SpotifyConnection-bluetooth.ino   ← firmware (NimBLE / HijelHID)
+libraries/                            ← NimBLE-Arduino + HijelHID_BLEKeyboard (gitignored; clone or install separately)
 ```
 
 ---
