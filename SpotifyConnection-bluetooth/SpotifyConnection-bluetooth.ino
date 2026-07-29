@@ -2,7 +2,7 @@
 #include <HijelHID_BLEKeyboard.h>
 
 // Name shown when pairing from the phone/PC. Manufacturer + battery % are cosmetic.
-HijelHID_BLEKeyboard bleKeyboard("Spotify Button", "DIY", 100);
+HijelHID_BLEKeyboard bleKeyboard("Noam DJ Buttons", "TOM - Tikkun Olam Makers", 100);
 
 const int playNextPin = 4;
 const int prevPin     = 17;
@@ -16,6 +16,9 @@ const unsigned long cooldownMs = 200;
 // Minimum gap between a Play/Next command and the next Next command.
 // Prevents an accidental double-tap from skipping two tracks.
 const unsigned long nextThrottleMs = 5000;
+// Minimum gap between consecutive Prev commands.
+// Prevents an accidental double-tap from skipping two tracks back.
+const unsigned long prevThrottleMs = 5000;
 const unsigned long heartbeatMs = 30000;
 
 struct ButtonState {
@@ -35,6 +38,8 @@ bool isPlaying = false;
 
 // Timestamp of the last Play or Next command sent; used for nextThrottleMs.
 unsigned long lastPlayOrNextMs = 0;
+// Timestamp of the last Prev command sent; used for prevThrottleMs.
+unsigned long lastPrevMs       = 0;
 unsigned long lastHeartbeatMs  = 0;
 bool bleConnected              = false;
 
@@ -114,9 +119,12 @@ void loop() {
   if (checkButton(prevBtn, prevPin, now)) {
     if (!bleKeyboard.isConnected()) {
       Serial.println("Prev: no BLE connection");
+    } else if (now - lastPrevMs < prevThrottleMs) {
+      Serial.println("Prev: ignored (throttle)");
     } else {
       Serial.println("Prev: previous track");
       bleKeyboard.tap(MEDIA_PREV_TRACK);
+      lastPrevMs = now;
     }
   }
 
