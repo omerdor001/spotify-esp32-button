@@ -150,6 +150,8 @@ Open Spotify on your phone, then use the buttons. The ESP32 sends media keys and
 
 The device tracks playback state locally based on what commands it has sent. If playback is changed from the phone (e.g. someone pauses Spotify manually), the device won't know. In that case, press **Stop** once to reset the device's state, then **Play/Next** to resume. This is an inherent limitation of BLE HID, which is a write-only channel.
 
+**iOS caveat:** on iPhone, `MEDIA_STOP` is not honored by iOS/Spotify — pressing Stop never actually pauses the music, but it *always* resets the device's internal state to "not playing" anyway (the device has no way to know the Stop was ignored). This means on iOS, Stop should only be pressed when you already know playback needs re-syncing (e.g. you just paused manually from the phone) — **not** as a "just in case" tap while music is genuinely still playing. If you press Stop while Spotify is actually still playing, the device will (wrongly) believe it's stopped, and the next Play/Next press will send a Play/Pause toggle that **pauses** the music instead of doing nothing/resuming. This is the same write-only limitation described above, just encountered from the other direction: Stop is a "tell the device I believe playback is now stopped" signal, not a verified action, and on iOS that signal is never actually true.
+
 ---
 
 ## Troubleshooting
@@ -172,6 +174,12 @@ The device tracks playback state locally based on what commands it has sent. If 
 ### Paired but Play/Pause doesn't work
 - **Android:** check that the BLE device has "Media" permissions in Bluetooth device settings
 - **iOS:** make sure Spotify is in the foreground the first time you press
+
+### Stop doesn't work on iPhone / pressing Stop then Play/Next pauses the music
+- **Known iOS limitation:** `MEDIA_STOP` is not honored by iOS, so Stop never actually pauses playback on iPhone.
+- Worse, pressing Stop still resets the device's internal "is playing" state regardless (see [State sync note](#state-sync-note)). If music was actually still playing, the device now incorrectly believes it's stopped.
+- So pressing Play/Next right after Stop sends a Play/Pause **toggle** — and since the music never really stopped, that toggle pauses it instead of doing nothing or resuming.
+- **Takeaway:** on iOS, only use Stop when you know the state actually needs resyncing (e.g. you manually paused from the Spotify app). Don't tap it "just in case" while music is playing.
 
 ### Serial Monitor shows garbage
 - Set baud rate to **115200**
