@@ -31,14 +31,6 @@ const unsigned long nextThrottleMs = 5000;
 // Prevents an accidental double-tap from skipping two tracks back.
 const unsigned long prevThrottleMs = 5000;
 const unsigned long heartbeatMs = 30000;
-// Players restart the current track on Previous once it has played past about
-// 3 seconds, and only go to the previous track before that. HID is one-way so we
-// can't read the position; instead we remember when we last changed track. If
-// that was within prevRestartWindowMs the track is still near its start and one
-// Prev goes back a song, otherwise send two Prevs (restart, then previous).
-const unsigned long prevRestartWindowMs = 3000;
-// Gap between the two Prev presses; short so the second lands inside the window.
-const unsigned long doublePrevGapMs = 250;
 // How long a keypress is held before the release report is sent.
 const unsigned long tapHoldMs = 25;
 
@@ -87,9 +79,6 @@ bool isPlaying = false;
 unsigned long lastPlayOrNextMs = 0;
 // Timestamp of the last Prev command sent; used for prevThrottleMs.
 unsigned long lastPrevMs       = 0;
-// When we last sent Play, Next or Prev (a likely track start); 0 flag = unknown.
-unsigned long lastTrackChangeMs = 0;
-bool          haveTrackChange   = false;
 unsigned long lastHeartbeatMs  = 0;
 
 BLEHIDDevice      *hid         = nullptr;
@@ -270,18 +259,14 @@ void loop() {
     } else if (!isPlaying) {
       Serial.println("Play/Next: play");
       tapUsage(USAGE_PLAY_PAUSE);
-      isPlaying         = true;
-      lastPlayOrNextMs  = now;
-      lastTrackChangeMs = now;
-      haveTrackChange   = true;
+      isPlaying        = true;
+      lastPlayOrNextMs = now;
     } else if (now - lastPlayOrNextMs < nextThrottleMs) {
       Serial.println("Play/Next: next ignored (throttle)");
     } else {
       Serial.println("Play/Next: next");
       tapUsage(USAGE_NEXT_TRACK);
-      lastPlayOrNextMs  = now;
-      lastTrackChangeMs = now;
-      haveTrackChange   = true;
+      lastPlayOrNextMs = now;
     }
   }
 
@@ -291,19 +276,9 @@ void loop() {
     } else if (now - lastPrevMs < prevThrottleMs) {
       Serial.println("Prev: ignored (throttle)");
     } else {
-      bool nearTrackStart = haveTrackChange && now - lastTrackChangeMs < prevRestartWindowMs;
-      if (nearTrackStart) {
-        Serial.println("Prev: previous track");
-        tapUsage(USAGE_PREV_TRACK);
-      } else {
-        Serial.println("Prev: restart + previous track");
-        tapUsage(USAGE_PREV_TRACK);
-        delay(doublePrevGapMs);
-        tapUsage(USAGE_PREV_TRACK);
-      }
-      lastPrevMs        = now;
-      lastTrackChangeMs = millis();
-      haveTrackChange   = true;
+      Serial.println("Prev: previous track");
+      tapUsage(USAGE_PREV_TRACK);
+      lastPrevMs = now;
     }
   }
 

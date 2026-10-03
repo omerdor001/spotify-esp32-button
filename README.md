@@ -16,7 +16,7 @@ The ESP32 pairs with your phone as a Bluetooth media controller (like a headset 
 ## Features
 
 - **Play/Next button** — press to play if stopped; press to skip to the next track if already playing
-- **Prev button** — goes to the previous track. Players restart the current track if it has played for more than ~3 s, so the firmware sends one Prev if it changed track in the last 3 s, otherwise two (restart, then previous). It can't read playback position, so this is a best guess; see `prevRestartWindowMs`
+- **Prev button** — standard Previous: most players restart the current track if it has played for more than a few seconds, and go to the previous track if pressed near the start. A second press within 5 s is ignored (throttle), so going back two songs needs a pause between presses
 - **Stop button** — stops playback and resets internal state
 - **Next-press throttle** — Next is ignored if a Play or Next was sent in the last 5 seconds, preventing accidental double-skips
 - **No WiFi required** — Bluetooth only; no network setup needed
@@ -133,8 +133,7 @@ Open Spotify on your phone, then use the buttons. The ESP32 sends media keys and
 | Play/Next (GPIO 4) | Spotify stopped | Plays |
 | Play/Next (GPIO 4) | Spotify playing | Skips to next track |
 | Play/Next (GPIO 4) | Within 5s of last Play/Next | Ignored (throttle) |
-| Prev (GPIO 17) | Track changed < 3 s ago | One Prev: previous track |
-| Prev (GPIO 17) | Otherwise | Two Prevs: restart track, then previous track |
+| Prev (GPIO 17) | Any | Sends Previous (the player restarts the track or goes back, per its own rules) |
 | Prev (GPIO 17) | Within 5s of last Prev | Ignored (throttle) |
 | Stop (GPIO 18) | Any | Stops playback |
 | Any button | BLE not connected | Serial prints "not connected" |
