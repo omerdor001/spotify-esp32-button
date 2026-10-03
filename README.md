@@ -7,7 +7,7 @@ Control Spotify with three physical buttons using an ESP32 over Bluetooth.
 The ESP32 pairs with your phone as a Bluetooth media controller (like a headset button). When you press a button, the ESP32 sends a media key to your phone, and your phone forwards it to Spotify — no WiFi or Spotify credentials needed on the ESP32.
 
 ![ESP32](https://img.shields.io/badge/ESP32-Compatible-blue)
-![Bluetooth](https://img.shields.io/badge/Bluetooth-BLE%20%28NimBLE%29-blue)
+![Bluetooth](https://img.shields.io/badge/Bluetooth-BLE%20HID-blue)
 ![Spotify](https://img.shields.io/badge/Spotify-via%20Phone-green)
 ![Arduino](https://img.shields.io/badge/Arduino-CLI%20%2F%20IDE-teal)
 
@@ -16,13 +16,14 @@ The ESP32 pairs with your phone as a Bluetooth media controller (like a headset 
 ## Features
 
 - **Play/Next button** — press to play if stopped; press to skip to the next track if already playing
-- **Prev button** — skips to the previous track
+- **Prev button** — standard Previous: most players restart the current track if it has played for more than a few seconds, and go to the previous track if pressed near the start. A second press within 5 s is ignored (throttle), so going back two songs needs a pause between presses
 - **Stop button** — stops playback and resets internal state
 - **Next-press throttle** — Next is ignored if a Play or Next was sent in the last 5 seconds, preventing accidental double-skips
 - **No WiFi required** — Bluetooth only; no network setup needed
 - **No credentials** — no Spotify Client ID/Secret on the device
 - **Native media keys** — phone handles Spotify routing automatically
-- **NimBLE stack** — uses NimBLE-Arduino for lower RAM usage and better long-run stability than the legacy Bluedroid BLE stack
+- **Subscription watchdog** — if a phone connects but never enables HID notifications (so every press would be silently lost), the firmware disconnects so the phone retries, and logs dropped presses
+- **ESP32 core BLE stack, no extra libraries** — a minimal media-key-only HID device (see [Design notes](#design-notes-read-before-changing-the-bluetooth-code))
 
 ---
 
@@ -61,7 +62,7 @@ GND     ──────── Pin 2
 
 ### Option A — Arduino CLI (recommended)
 
-Both libraries live in the `libraries/` folder of this repo — no separate install step needed.
+No extra libraries are needed — the sketch only uses the ESP32 core's built-in BLE.
 
 ```bash
 # Install ESP32 core (one-time)
@@ -71,8 +72,6 @@ arduino-cli core install esp32:esp32
 arduino-cli compile --upload \
   --fqbn esp32:esp32:nodemcu-32s \
   --port /dev/cu.usbserial-0001 \
-  --library libraries/HijelHID_BLEKeyboard \
-  --library libraries/NimBLE-Arduino \
   SpotifyConnection-bluetooth/
 ```
 
@@ -86,12 +85,6 @@ arduino-cli compile --upload \
      ```
    - `Tools → Board → Boards Manager` → search **ESP32** → Install
 
-3. Install libraries via `Sketch → Include Library → Manage Libraries`:
-
-| Library | Author |
-|---|---|
-| **NimBLE-Arduino** | h2zero |
-| **HijelHID_BLEKeyboard** | Hijel |
 
 ---
 
@@ -104,8 +97,6 @@ arduino-cli compile --upload \
 arduino-cli compile --upload \
   --fqbn esp32:esp32:nodemcu-32s \
   --port /dev/cu.usbserial-0001 \
-  --library libraries/HijelHID_BLEKeyboard \
-  --library libraries/NimBLE-Arduino \
   SpotifyConnection-bluetooth/
 ```
 
@@ -119,13 +110,15 @@ arduino-cli compile --upload \
 After uploading, open the Serial Monitor (115200 baud). You'll see:
 
 ```
-Starting BLE HID keyboard...
-Advertising as 'Spotify Button'. Pair from your phone/PC.
+Starting BLE HID remote...
+Advertising as 'Noam DJ Buttons'. Pair from your phone/PC.
 ```
 
 On your phone:
-- **Android:** Settings → Bluetooth → pair **Spotify Button**
-- **iOS:** Settings → Bluetooth → pair **Spotify Button**
+- **Android:** Settings → Bluetooth → pair **Noam DJ Buttons**
+- **iOS:** Settings → Bluetooth → pair **Noam DJ Buttons**
+
+If you re-flash the board or change anything about its Bluetooth identity, **Forget** the device on the phone and pair again. Phones cache pairing and GATT details.
 
 ### 3. Use It
 
@@ -140,7 +133,8 @@ Open Spotify on your phone, then use the buttons. The ESP32 sends media keys and
 | Play/Next (GPIO 4) | Spotify stopped | Plays |
 | Play/Next (GPIO 4) | Spotify playing | Skips to next track |
 | Play/Next (GPIO 4) | Within 5s of last Play/Next | Ignored (throttle) |
-| Prev (GPIO 17) | Any | Skips to previous track |
+| Prev (GPIO 17) | Any | Sends Previous (the player restarts the track or goes back, per its own rules) |
+| Prev (GPIO 17) | Within 5s of last Prev | Ignored (throttle) |
 | Stop (GPIO 18) | Any | Stops playback |
 | Any button | BLE not connected | Serial prints "not connected" |
 
@@ -167,7 +161,7 @@ The device tracks playback state locally based on what commands it has sent. If 
 - Ensure the button or wire makes solid contact with GND
 - On iOS/macOS, two rapid Play/Pause keypresses = skip track (double-tap behavior) — so a noisy pin can skip songs instead of toggling
 
-### Phone doesn't see "Spotify Button"
+### Phone doesn't see "Noam DJ Buttons"
 - Make sure Bluetooth is on
 - Press the ESP32 reset button and try pairing again
 
@@ -181,11 +175,18 @@ The device tracks playback state locally based on what commands it has sent. If 
 - So pressing Play/Next right after Stop sends a Play/Pause **toggle** — and since the music never really stopped, that toggle pauses it instead of doing nothing or resuming.
 - **Takeaway:** on iOS, only use Stop when you know the state actually needs resyncing (e.g. you manually paused from the Spotify app). Don't tap it "just in case" while music is playing.
 
+### Connected, but no button does anything
+Watch the Serial Monitor (115200 baud). The heartbeat every 30 s shows `hid=subscribed` or `hid=not-subscribed`.
+- `hid=not-subscribed`: the phone connected but didn't enable HID notifications. The watchdog disconnects after 15 s so the phone retries; if it keeps happening, Forget the device on the phone and re-pair.
+- `hid=subscribed` and presses are logged but nothing happens on the phone: see [Design notes](#design-notes-read-before-changing-the-bluetooth-code). This was caused by the advertised GAP appearance on a Pixel; do not change it without testing on a Pixel.
+- Opening the serial port from a computer resets the ESP32 (DTR/RTS), so a stuck state disappears when you start logging.
+- Garbage serial output right after boot plus "Brownout detector was triggered" means weak power: re-seat or replace the USB cable.
+
 ### Serial Monitor shows garbage
 - Set baud rate to **115200**
 
-### Compile error: missing library headers
-- Make sure you pass both `--library` paths (CLI) or have **NimBLE-Arduino** and **HijelHID_BLEKeyboard** installed (IDE). See [Software Requirements](#software-requirements).
+### Compile error: missing BLE headers
+- Install the ESP32 core (`arduino-cli core install esp32:esp32`). No other libraries are needed.
 
 ---
 
@@ -193,13 +194,25 @@ The device tracks playback state locally based on what commands it has sent. If 
 
 ```
 SpotifyConnection-bluetooth/
-    SpotifyConnection-bluetooth.ino   ← firmware (NimBLE / HijelHID)
-libraries/                            ← NimBLE-Arduino + HijelHID_BLEKeyboard (gitignored; clone or install separately)
+    SpotifyConnection-bluetooth.ino   ← firmware (ESP32 core BLE, media-key HID)
+PIXEL_BUG_INVESTIGATION.md            ← the Pixel investigation and its resolution
+GOOGLE_BUG_REPORT.md                  ← report filed with Google (Android Issue Tracker 568711381)
 ```
+
+---
+
+## Design notes (read before changing the Bluetooth code)
+
+The phone showed this device as connected while every button press was silently dropped. After a long investigation (details in [PIXEL_BUG_INVESTIGATION.md](PIXEL_BUG_INVESTIGATION.md)), the lessons are:
+
+- **The advertised GAP appearance matters.** On a Pixel 9 (Android 17) the Bluetooth HID host dropped our media-key reports when the device advertised as a **Keyboard** (`0x03C1`), even though the link was encrypted, subscribed and the ESP32 sent every notification. Advertising **Generic HID** (`0x03C0`) or **Remote Control** (`0x0180`) fixed it. Generic HID is used because Remote Control stopped working on iPhone. This is `appearanceRemoteControl` in the sketch (the name is historical).
+- **`notify()` returning true proves nothing.** Neither NimBLE nor Bluedroid tell you whether the phone is subscribed. That's why the sketch tracks the input report's CCCD (the notification-enable flag, which keeps its state across disconnects and so is cleared on every connection) and watches for non-subscribing hosts.
+- **Test on both an iPhone and a Pixel** after any change to the descriptor, appearance, name, security settings or BLE stack. Forget the device on each phone before every test; they cache pairing and GATT data.
+- **The stack was replaced for a reason.** The previous NimBLE-Arduino + HijelHID_BLEKeyboard build advertised as a Keyboard and had the same failure (we assume for the same reason; it was not re-tested with a different appearance before switching stacks). The current code is a ~250 line sketch based on the ESP32 core's `BLEHIDDevice` with a consumer-control-only report descriptor; every button is a media usage, so no keyboard report is needed. Trade-off: no NimBLE-style idle power saving.
+- **Google issue:** [568711381](https://issuetracker.google.com/issues/568711381) tracks the underlying Android behavior (silently dropping valid HID reports for a keyboard-appearance device). A weekly scheduled task in the Claude desktop app checks it.
 
 ---
 
 ## Acknowledgments
 
-- [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) by h2zero
-- [HijelHID_BLEKeyboard](https://github.com/HijelHub/HijelHID_BLEKeyboard) by Hijel
+- Based on the `Server_Gamepad` BLE HID example from [arduino-esp32](https://github.com/espressif/arduino-esp32)
