@@ -1,5 +1,10 @@
 # Pixel / Android BLE HID Investigation — Summary & Resume Notes
 
+**UPDATE 2026-10-03 — RESOLVED (workaround in firmware).** The cause was the
+advertised GAP appearance, not the Pixel being unable to do BLE HID at all.
+See [Resolution](#resolution-2026-10-03) at the end; the original notes below
+are kept for history and some of their conclusions were superseded.
+
 **Status as of 2026-07-29:** Unresolved. Confirmed to be an Android/Pixel-side
 Bluetooth stack issue, not a firmware bug. Paused pending access to a
 non-Pixel Android device for further isolation.
@@ -160,3 +165,59 @@ The device is currently flashed with the single-report-only **test** build
 (from the last diagnostic step). The `.ino` will be reverted and **should be
 reflashed with the normal production firmware** before resuming normal use —
 see next steps below.
+
+---
+
+## Resolution (2026-10-03)
+
+**Root cause (as far as we can tell):** a Pixel 9 on Android 17 (patch
+2026-09-05) drops HID input reports from a device that advertises the GAP
+appearance **Keyboard (`0x03C1`)**, even when the link is bonded, encrypted and
+subscribed and the peripheral sends valid reports. Advertising **Remote Control
+(`0x0180`)** or **Generic HID (`0x03C0`)** makes the same reports arrive.
+Android's side of this is probably a bug (silent drop, device shown as
+connected); filed as Google Issue Tracker
+[568711381](https://issuetracker.google.com/issues/568711381).
+
+**What the 2026-10-02/03 session established**
+
+1. ESP32 side was healthy: with debug logging, notifications went to a real,
+   secured subscriber on the consumer report (attr 0x24) and `adb getevent`
+   showed zero events on the Pixel. The iPhone worked with the same firmware.
+2. `notify()` returns true even with zero subscribers (NimBLE), so "sent OK"
+   proves nothing. Separately, in some sessions the Pixel connected and
+   subscribed only to Battery Level, never to the HID reports.
+3. An independent minimal sketch on the ESP32 core's own BLE stack (Bluedroid,
+   consumer-control-only descriptor) failed identically on the Pixel with a
+   Keyboard appearance and worked on the Pixel with `0x0180`. That A/B test
+   (same code, one constant) is what pinned the appearance.
+4. `0x0180` worked on the Pixel but **not on an iPhone**; `0x03C0` works on both
+   (tested with the production sketch, forgetting/re-pairing each phone).
+5. In the NimBLE build, `NimBLEAdvertising::setAppearance()` appends a second
+   appearance field instead of replacing the first, so overriding the library's
+   hard-coded `0x03C1` needs `setAppearance(0)` first. (Moot now, kept as a
+   gotcha.)
+
+**Fix shipped:** `SpotifyConnection-bluetooth.ino` now uses the ESP32 core BLE
+stack with a minimal consumer-control HID descriptor (all buttons are media
+usages) and appearance `0x03C0`, plus a subscription watchdog. The NimBLE-Arduino
++ HijelHID_BLEKeyboard dependencies are no longer used.
+
+**Not verified**
+- Whether the old NimBLE build would also have worked with `0x03C0` (never tried).
+- Non-Pixel Android phones. The Pixel is the only Android device tested; the
+  handover recipient's phone is untested. A Samsung A07 / Android 16 passes with
+  the old library per its `test_data`.
+- The "worked in late June" regression: the firmware did not change, so Android
+  (or its Bluetooth module update) changed behavior. No Android changelog found.
+
+**Earlier hypotheses in this document that this supersedes:** "failure is
+specifically in delivering BLE HID Input Report notifications into a kernel
+input event ... genuine AOSP regression, not fixable in firmware" — it is
+fixable in firmware via the appearance; and the "Next step: test on non-Pixel
+Android" is still worth doing before handover as a sanity check.
+
+**Tooling notes:** opening the ESP32's serial port from a Mac resets it (DTR/RTS),
+which clears any stuck state; capture serial with a script that holds the port
+open instead of reopening. `adb shell getevent -il` lists the Bluetooth input
+device; `adb shell getevent -lt` shows its events.

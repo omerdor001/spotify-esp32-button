@@ -1,5 +1,8 @@
 # Pixel 9 / Android 17: BLE HID-over-GATT peripheral is "connected" but delivers no input events
 
+**Filed:** [issuetracker.google.com/issues/568711381](https://issuetracker.google.com/issues/568711381) on 2026-10-02 (Android Public Tracker > Framework). Google assigned it and asked for an Android bug report (status NeedsInfo).
+**Update 2026-10-03:** the repro narrowed to the advertised GAP appearance; see [Update](#update-2026-10-03-narrowed-repro) below. The text under Summary is what was originally filed.
+
 Draft for Google Issue Tracker (component: Android Public Tracker > Connectivity > Bluetooth).
 
 ## Summary
@@ -60,3 +63,35 @@ Each notification on the HID Input Report characteristic produces an input event
 - Regression: worked on this Pixel 9 around late June 2026; no firmware change since 2026-06-28.
 - A Samsung A07 on Android 16 passes with Firmware A's library (per the library's test data).
 - An HCI snoop log was not captured; I can attach one on request.
+
+## Update 2026-10-03: narrowed repro
+
+The failure depends on the advertised GAP appearance (AD type 0x19). Same
+peripheral code, same descriptor, only this constant changed:
+
+| Appearance | Pixel 9 (Android 17) | iPhone |
+|---|---|---|
+| `0x03C1` Keyboard | reports dropped (no input events) | works |
+| `0x0180` Remote Control | works | reports ignored |
+| `0x03C0` Generic HID | works | works |
+
+So HID input reports for a device whose appearance is Keyboard are silently
+dropped while Android reports the device as connected. Workaround on the
+peripheral: advertise `0x03C0`. Still worth Google's attention: the device is
+shown connected and bonded, and no error is surfaced.
+
+### Draft comment for the issue (not posted; needs the owner's OK)
+
+> Update: I narrowed this down. The reports are dropped only when the peripheral
+> advertises the GAP appearance Keyboard (0x03C1). With an identical ESP32
+> sketch (arduino-esp32 BLEHIDDevice, consumer-control-only report map, Just
+> Works bonding) the Pixel 9 / Android 17 delivers the Play/Pause notifications
+> when the appearance is Remote Control (0x0180) or Generic HID (0x03C0), and
+> drops them with 0x03C1. The link is bonded, encrypted and subscribed in every
+> case; `dumpsys bluetooth_manager` shows HOGP connected and `getevent` shows no
+> events in the failing case. iPhone delivers with 0x03C1 and 0x03C0.
+> I have a workaround (advertise 0x03C0), so this is no longer blocking me, but
+> a connected, bonded HOGP device silently dropping input reports based on its
+> appearance looks unintended, and it appears to be a change since ~June 2026.
+> I can capture the bug report you asked for with the failing configuration
+> (appearance 0x03C1) if that is still useful.
